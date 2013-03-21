@@ -104,10 +104,8 @@ default_ignore_codes = []
 
 import os
 from os import path
-import re
 import sys
 
-from subprocess import Popen, PIPE
 from pyflakes.api import checkPath
 from pep8 import StyleGuide, BaseReport
 
@@ -118,62 +116,16 @@ except NameError:
 
 
 class LintRunner(object):
-    """Base class provides common functionality to run python code checkers.
+    """Base class for tool runners.
 
     """
 
-    output_format = ("%(level)s %(error_type)s%(error_number)s:"
-                     "%(description)s at %(filename)s line %(line_number)s.")
-
-    output_template = dict.fromkeys(
-        ('level', 'error_type', 'error_number', 'description',
-         'filename', 'line_number'), '')
-
-    output_matcher = None
-
-    sane_default_ignore_codes = set([])
-
-    command = None
-
-    run_flags = ()
-
-    def __init__(self, ignore_codes=(), use_sane_defaults=True):
-        self.ignore_codes = set(ignore_codes)
-        if use_sane_defaults:
-            self.ignore_codes ^= self.sane_default_ignore_codes
-
-    def fixup_data(self, line, data):
-        return data
-
-    def process_output(self, line):
-        m = self.output_matcher.match(line)
-        if m:
-            return m.groupdict()
-
     def run(self, filename):
-        args = [self.command]
-        args.extend(self.run_flags)
-        args.append(filename)
-
-        process = Popen(args, stdout=PIPE, stderr=PIPE)
-
-        for line in process.stdout:
-            match = self.process_output(line)
-            if match:
-                tokens = dict(self.output_template)
-                tokens.update(self.fixup_data(line, match))
-                print self.output_format % tokens
-
-        for line in process.stderr:
-            match = self.process_output(line)
-            if match:
-                tokens = dict(self.output_template)
-                tokens.update(self.fixup_data(line, match))
-                print self.output_format % tokens
+        pass
 
 
 class OutputFormatter(object):
-    """Base class for output formatters of tool output
+    """Base class for output formatters of tool output.
     """
 
     ErrorLevel = 'ERROR'
@@ -191,7 +143,7 @@ class OutputFormatter(object):
 
 
 class FlymakeFormatter(OutputFormatter):
-    """Format tool output for flymake
+    """Format tool output for flymake.
 
     """
 
@@ -341,11 +293,10 @@ if __name__ == '__main__':
 
     for checker in checkers.split(','):
         try:
-            cls = RUNNERS[checker.strip()]
+            runner = (RUNNERS[checker.strip()])()
         except KeyError:
             croak(("Unknown checker `%s'" % checker),
                   ("Expected one of %s" % ', '.join(RUNNERS.keys())))
-        runner = cls(ignore_codes=ignore_codes)
         runner.run(source_file)
 
     sys.exit(0)
