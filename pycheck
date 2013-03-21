@@ -108,10 +108,18 @@ import re
 import sys
 
 from subprocess import Popen, PIPE
+from pyflakes.api import checkPath
+
+try:
+    u = unicode
+except NameError:
+    u = str
 
 
 class LintRunner(object):
-    """Base class provides common functionality to run python code checkers."""
+    """Base class provides common functionality to run python code checkers.
+
+    """
 
     output_format = ("%(level)s %(error_type)s%(error_number)s:"
                      "%(description)s at %(filename)s line %(line_number)s.")
@@ -163,37 +171,102 @@ class LintRunner(object):
                 print self.output_format % tokens
 
 
-class PyflakesRunner(LintRunner):
-    """Run pyflakes, producing flymake readable output.
-
-    The raw output looks like:
-      tests/test_richtypes.py:4: 'doom' imported but unused
-      tests/test_richtypes.py:33: undefined name 'undefined'
-    or:
-      tests/test_richtypes.py:40: could not compile
-             deth
-            ^
+class OutputFormatter(object):
+    """Base class for output formatters of tool output
     """
 
-    command = 'pyflakes'
+    ErrorLevel = 'ERROR'
+    WarningLevel = 'WARNING'
+    InfoLevel = 'INFO'
 
-    output_matcher = re.compile(
-        r'(?P<filename>[^:]+):'
-        r'(?P<line_number>[^:]+):'
-        r'(?P<description>.+)$')
+    def __init__(self, output_stream=sys.stdout):
+        self.output_stream = output_stream
 
-    @classmethod
-    def fixup_data(cls, line, data):
-        if 'imported but unused' in data['description']:
-            data['level'] = 'WARNING'
-        elif 'redefinition of unused' in data['description']:
-            data['level'] = 'WARNING'
+    def error(self, filename, message):
+        pass
+
+    def event(self, filename, description, line_number, event_level, event_kind, event_number):
+        pass
+
+
+class FlymakeFormatter(OutputFormatter):
+    """Format tool output for flymake
+
+    """
+
+    error_output = u('{filename}: {message}.\n')
+    event_output = u('{level} {kind}{number}: {message} at {filename} line {line}.\n')
+
+    def error(self, filename, message):
+        self.output_stream.write(self.error_output.format(filename=filename, message=message))
+
+    def event(self, filename, description, line_number, event_level=OutputFormatter.ErrorLevel, event_kind='', event_number=''):
+        self.output_stream.write(self.event_output.format(level=event_level,
+                                                          kind=event_kind,
+                                                          number=event_number,
+                                                          message=description,
+                                                          filename=filename,
+                                                          line=line_number))
+
+
+class PyflakesReporter(object):
+    """Report errors from Pyflakes
+
+    """
+    
+    def __init__(self, formatter):
+        """
+        Construct a PyflakesReporter.
+
+        Args:
+            formatter: an instance of OutputFormatter
+        """
+        self.formatter = formatter
+
+    def unexpectedError(self, filename, msg):
+        """
+        An unexpected error occurred trying to process filename.
+
+        Args:
+            filename: the filename causing an error
+            msg: the message to report
+        """
+        self.formatter.error(filename, msg)
+
+    def syntaxError(self, filename, msg, lineno, offset, text):
+        """
+        There was a syntax errror in filename.
+
+        """
+        event_level = self._guess_event_level(msg)
+        self.formatter.event(filename, msg, lineno, event_level, 'PY', 'S')
+
+    def flake(self, event):
+        """
+        pyflakes found something wrong with the code.
+
+        Args:
+            event: A pyflakes.messages.Message.
+        """
+        event_level = self._guess_event_level(event.message)
+        self.formatter.event(event.filename, event.message % event.message_args, event.lineno, event_level, 'PY', 'F')
+
+    def _guess_event_level(self, message):
+        if 'imported but unused' in message:
+            return OutputFormatter.WarningLevel
+        elif 'redefinition of unused' in message:
+            return OutputFormatter.WarningLevel
         else:
-            data['level'] = 'ERROR'
-        data['error_type'] = 'PY'
-        data['error_number'] = 'F'
+            return OutputFormatter.ErrorLevel
 
-        return data
+
+class PyflakesRunner(LintRunner):
+    """Run the pyflakes tool.
+
+    """
+
+    def run(self, filename):
+        checkPath(filename, PyflakesReporter(FlymakeFormatter()))
 
 
 class Pep8Runner(LintRunner):
