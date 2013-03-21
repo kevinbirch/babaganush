@@ -1,41 +1,99 @@
 #!/usr/bin/env python
-"""A hacked up version of the multiple-Python checkers script from EmacsWiki.
+"""A helper script to run static analysis tools on Python code and
+report issues.
 
- - Simplified & faster
- - Extended with pep8.py
- - Extended with pydo (http://www.lunaryorn.de/code/pydo.html)
- - pylint & pychecker removed
+Currently supported tools are Pyflakes and PEP8.
 
-Drop something like this in your .emacs:
+## Usage from Emacs
 
-(when (load "flymake" t)
-  (defun flymake-pycheckers-init ()
+Add something like the following to your init file:
+
+```lisp
+(add-hook 'python-mode-hook
+          (lambda ()
+            (flymake-mode)
+            )
+          )
+
+(defun flymake-pycheckers-init ()
     (let* ((temp-file (flymake-init-create-temp-buffer-copy
                        'flymake-create-temp-inplace))
            (local-file (file-relative-name
                         temp-file
                         (file-name-directory buffer-file-name))))
-      (list "/path/to/this/file" (list local-file))))
+      (list (expand-file-name "~/bin/pycheck") (list local-file))))
 
+(add-to-list 'flymake-allowed-file-name-masks
+               '("\\.py\\'" flymake-pycheckers-init))
+```
 
-You may also need to set up your path up in the __main__ function at the
-bottom of the file and change the #! line above to an appropriate interpreter.
+Replace `~/bin/pycheck` with the location where you've saved this
+script.
 
-==============================================================================
+The results will be printed to standard out in a format compatible
+with flymake.
 
-This code is made available by Jason Kirtland <jek@discorporate.us> under the
-Creative Commons Share Alike 1.0 license:
-http://creativecommons.org/licenses/sa/1.0/
+## Usage from the command line
 
-Original work taken from http://www.emacswiki.org/emacs/PythonMode, author
-unknown.
+Simply run this script with a Python file as the only argument.
+
+## Caveats
+
+You may also need to set up your path up in the __main__ function at
+the bottom of the file and change the #! line above to an appropriate
+interpreter.
+
+## Copyright
+
+Copyright (c) 2013 Kevin Birch <kmb@pobox.com>. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal with the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+* Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimers.
+
+* Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimers in the
+  documentation and/or other materials provided with the distribution.
+
+* Neither the names of the copyright holders, nor the names of the
+  authors, nor the names of other contributors may be used to endorse
+  or promote products derived from this Software without specific
+  prior written permission.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR
+ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE SOFTWARE.
+
+## Colophon
+
+This script is adapted from code orignally written by Jason Kirtland
+<jek@discorporate.us>[1] and released under the Creative Commons Share
+Alike 1.0 license[2].
+
+Jason's code was based on original work taken from the PythonMode
+page[3] of the Emacs Wiki, author unknown.
+
+[1] https://bitbucket.org/jek/sandbox/src/tip/pycheckers
+[2] http://creativecommons.org/licenses/sa/1.0/
+[3] http://www.emacswiki.org/emacs/PythonMode
 
 """
 
 ## Customization ##
 
 # Checkers to run be default, when no --checkers options are supplied.
-# One or more of pydo, pep8 or pyflakes, separated by commas
+# One or more of pep8 or pyflakes, separated by commas
 default_checkers = 'pep8, pyflakes'
 
 # A list of error codes to ignore.
@@ -168,35 +226,6 @@ class Pep8Runner(LintRunner):
         return '--repeat', '--ignore=' + ','.join(self.ignore_codes)
 
 
-class PydoRunner(LintRunner):
-    """Run pydo, producing flymake readable output.
-
-    The raw output looks like:
-      users.py:356:FIXME this will fail if None
-      users.py:470:todo:rtf memcache this possibly?
-      users.py:482:TODO This will need to trigger a history entry and
-
-    """
-
-    command = 'pydo'
-
-    output_matcher = re.compile(
-        r'(?P<filename>[^:]+):'
-        r'(?P<line_number>[^:]+):'
-        r'(?P<error_number>\w+)'
-        r'(\W*|\s*)'
-        r'(?P<description>.*)$')
-
-    @classmethod
-    def fixup_data(cls, line, data):
-        number = data['error_number'] = data['error_number'].upper()
-        if number == 'FIXME':
-            data['level'] = 'ERROR'
-        else:
-            data['level'] = 'WARNING'
-        return data
-
-
 def croak(*msgs):
     for m in msgs:
         print >> sys.stderr, m.strip()
@@ -206,7 +235,6 @@ def croak(*msgs):
 RUNNERS = {
     'pyflakes': PyflakesRunner,
     'pep8': Pep8Runner,
-    'pydo': PydoRunner,
     }
 
 
