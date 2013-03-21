@@ -109,6 +109,7 @@ import sys
 
 from subprocess import Popen, PIPE
 from pyflakes.api import checkPath
+from pep8 import StyleGuide, BaseReport
 
 try:
     u = unicode
@@ -195,7 +196,8 @@ class FlymakeFormatter(OutputFormatter):
     """
 
     error_output = u('{filename}: {message}.\n')
-    event_output = u('{level} {kind}{number}: {message} at {filename} line {line}.\n')
+    event_output = u('{level} {kind}{number}: {message}'
+                     ' at {filename} line {line}.\n')
 
     def error(self, filename, message):
         self.output_stream.write(self.error_output.format(filename=filename, message=message))
@@ -210,10 +212,10 @@ class FlymakeFormatter(OutputFormatter):
 
 
 class PyflakesReporter(object):
-    """Report errors from Pyflakes
+    """Report events from the pyflakes tool.
 
     """
-    
+
     def __init__(self, formatter):
         """
         Construct a PyflakesReporter.
@@ -249,7 +251,9 @@ class PyflakesReporter(object):
             event: A pyflakes.messages.Message.
         """
         event_level = self._guess_event_level(event.message)
-        self.formatter.event(event.filename, event.message % event.message_args, event.lineno, event_level, 'PY', 'F')
+        msg = event.message % event.message_args
+        self.formatter.event(event.filename, msg, event.lineno,
+                             event_level, 'PY', 'F')
 
     def _guess_event_level(self, message):
         if 'imported but unused' in message:
@@ -269,53 +273,48 @@ class PyflakesRunner(LintRunner):
         checkPath(filename, PyflakesReporter(FlymakeFormatter()))
 
 
-class Pep8Runner(LintRunner):
-    """Run pep8.py, producing flymake readable output.
-
-    The raw output looks like:
-      spiders/structs.py:3:80: E501 line too long (80 characters)
-      spiders/structs.py:7:1: W291 trailing whitespace
-      spiders/structs.py:25:33: W602 deprecated form of raising exception
-      spiders/structs.py:51:9: E301 expected 1 blank line, found 0
+class Pep8Reporter(BaseReport):
+    """Report events from the pep8 tool.
 
     """
 
-    command = 'pep8'
+    def error(self, line_number, offset, text, check):
+        """Report an error, according to options."""
+        code = super(Pep8Reporter, self).error(line_number, offset,
+                                               text, check)
 
-    output_matcher = re.compile(
-        r'(?P<filename>[^:]+):'
-        r'(?P<line_number>[^:]+):'
-        r'[^:]+:'
-        r' (?P<error_number>\w+) '
-        r'(?P<description>.+)$')
+        event_level = OutputFormatter.WarningLevel if code.startswith('W') else OutputFormatter.ErrorLevel
+        self.formatter.event(self.filename, text[5:], line_number, event_level, code[:1], code[1:])
+        return code
 
-    @classmethod
-    def fixup_data(cls, line, data):
-        data['level'] = 'WARNING'
-        return data
 
-    @property
-    def run_flags(self):
-        return '--repeat', '--ignore=' + ','.join(self.ignore_codes)
+class Pep8Runner(LintRunner):
+    """Run the pep8 tool.
+
+    """
+    def run(self, filename):
+        style_guide = StyleGuide(config_file=True)
+        reporter = style_guide.init_report(reporter=Pep8Reporter)
+        reporter.formatter = FlymakeFormatter()
+        style_guide.input_file(filename)
 
 
 def croak(*msgs):
     for m in msgs:
-        print >> sys.stderr, m.strip()
+        sys.stderr.write(m.strip())
+        sys.stderr.write('\n')
+    sys.stderr.flush()
     sys.exit(1)
-
 
 RUNNERS = {
     'pyflakes': PyflakesRunner,
     'pep8': Pep8Runner,
-    }
-
+}
 
 if __name__ == '__main__':
     # transparently add a virtualenv to the path when launched with a venv'd
     # python.
-    os.environ['PATH'] = \
-      path.dirname(sys.executable) + ':' + os.environ['PATH']
+    os.environ['PATH'] = path.dirname(sys.executable) + ':' + os.environ['PATH']
 
     if len(sys.argv) < 2:
         croak("Usage: %s [file]" % sys.argv[0])
@@ -331,14 +330,9 @@ if __name__ == '__main__':
         options, args = parser.parse_args()
         if not args:
             croak("Usage: %s [file]" % sys.argv[0])
-        if options.checkers:
-            checkers = options.checkers
-        else:
-            checkers = default_checkers
-        if options.ignore_codes:
-            ignore_codes = options.ignore_codes
-        else:
-            ignore_codes = default_ignore_codes
+
+        checkers = options.checkers or default_checkers
+        ignore_codes = options.ignore_codes or default_ignore_codes
         source_file = args[0]
     else:
         source_file = sys.argv[1]
@@ -349,7 +343,7 @@ if __name__ == '__main__':
         try:
             cls = RUNNERS[checker.strip()]
         except KeyError:
-            croak(("Unknown checker %s" % checker),
+            croak(("Unknown checker `%s'" % checker),
                   ("Expected one of %s" % ', '.join(RUNNERS.keys())))
         runner = cls(ignore_codes=ignore_codes)
         runner.run(source_file)
