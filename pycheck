@@ -106,7 +106,7 @@ import os
 from os import path
 import sys
 
-from pyflakes.api import checkPath
+from pyflakes import api as pyflakes
 from pep8 import StyleGuide, BaseReport
 
 try:
@@ -126,16 +126,17 @@ class LintRunner(object):
 
 class OutputFormatter(object):
     """Base class for output formatters of tool output.
+
     """
 
-    ErrorLevel = 'ERROR'
-    WarningLevel = 'WARNING'
-    InfoLevel = 'INFO'
+    ErrorLevel = 'error'
+    WarningLevel = 'warning'
+    InfoLevel = 'info'
 
     def __init__(self, output_stream=sys.stdout):
         self.output_stream = output_stream
 
-    def error(self, filename, message):
+    def error(self, filename, message, line_number):
         pass
 
     def event(self, filename, description, line_number, event_level, event_kind, event_number):
@@ -147,12 +148,11 @@ class FlymakeFormatter(OutputFormatter):
 
     """
 
-    error_output = u('{filename}: {message}.\n')
-    event_output = u('{level} {kind}{number}: {message}'
-                     ' at {filename} line {line}.\n')
+    error_output = u('{filename}:{line}:: {message}.\n')
+    event_output = u('{filename}:{line}:{kind}{number}:{level} {message}.\n')
 
-    def error(self, filename, message):
-        self.output_stream.write(self.error_output.format(filename=filename, message=message))
+    def error(self, filename, message, line_number=''):
+        self.output_stream.write(self.error_output.format(filename=filename, line=line_number, message=message))
 
     def event(self, filename, description, line_number, event_level=OutputFormatter.ErrorLevel, event_kind='', event_number=''):
         self.output_stream.write(self.event_output.format(level=event_level,
@@ -222,7 +222,7 @@ class PyflakesRunner(LintRunner):
     """
 
     def run(self, filename):
-        checkPath(filename, PyflakesReporter(FlymakeFormatter()))
+        pyflakes.checkPath(filename, PyflakesReporter(FlymakeFormatter()))
 
 
 class Pep8Reporter(BaseReport):
@@ -251,6 +251,17 @@ class Pep8Runner(LintRunner):
         style_guide.input_file(filename)
 
 
+class Flake8Runner(LintRunner):
+    """Run the flake8 tool.
+
+    """
+    def run(self, filename):
+        style_guide = StyleGuide(config_file=True)
+        reporter = style_guide.init_report(reporter=Pep8Reporter)
+        reporter.formatter = FlymakeFormatter()
+        style_guide.input_file(filename)
+
+
 def croak(*msgs):
     for m in msgs:
         sys.stderr.write(m.strip())
@@ -261,6 +272,7 @@ def croak(*msgs):
 RUNNERS = {
     'pyflakes': PyflakesRunner,
     'pep8': Pep8Runner,
+    'flake8': Flake8Runner
 }
 
 if __name__ == '__main__':
