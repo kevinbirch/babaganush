@@ -114,6 +114,14 @@ DEFAULT_CHECKERS = ['flake8']
 
 DEFAULT_EVENT_FORMAT = u('{filename}:{line}:{level} {code} {message}.\n')
 
+if sys.platform.startswith('win'):
+    DEFAULT_CONFIG = os.path.expanduser(r'~\.pycheck')
+else:
+    DEFAULT_CONFIG = os.path.join(
+        os.getenv('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'),
+        'pycheck'
+    )
+
 
 def runner(clazz):
     """The decoration implementation for runner classes.
@@ -235,7 +243,7 @@ class PyflakesReporter(object):
             return
         level = self._guess_event_level(event.message)
         msg = event.message % event.message_args
-        self.formatter.event(event.filename, msg, event.lineno, code, level)        
+        self.formatter.event(event.filename, msg, event.lineno, code, level)
 
     def _guess_event_level(self, message):
         if 'imported but unused' in message:
@@ -326,6 +334,7 @@ def croak(*msgs):
 
 def usage():
     croak(USAGE_MESSAGE)
+
 
 def parse_options():
     parser = OptionParser(usage=USAGE_MESSAGE)
