@@ -91,7 +91,6 @@ page[3] of the Emacs Wiki, author unknown.
 """
 
 import os
-from os import path
 import sys
 
 from optparse import OptionParser
@@ -99,6 +98,11 @@ from optparse import OptionParser
 from pyflakes import api as pyflakes
 from pep8 import StyleGuide, BaseReport
 from flake8 import engine as flake8_engine, main as flake8_main
+
+try:
+    from configparser import RawConfigParser
+except ImportError:
+    from ConfigParser import RawConfigParser
 
 try:
     u = unicode
@@ -114,13 +118,40 @@ DEFAULT_CHECKERS = ['flake8']
 
 DEFAULT_EVENT_FORMAT = u('{filename}:{line}:{level} {code} {message}.\n')
 
+
+class EventLevel(object):
+    """Enumeration of event levels.
+    """
+    ErrorLevel = 'error'
+    WarningLevel = 'warning'
+    InfoLevel = 'info'
+
+
+DEFAULT_CLASSIFICATIONS = {
+    # PEP8 events
+    'W191': EventLevel.WarningLevel,
+    'W291': EventLevel.WarningLevel,
+    'W292': EventLevel.WarningLevel,
+    'W293': EventLevel.WarningLevel,
+    'W391': EventLevel.WarningLevel,
+    'W601': EventLevel.WarningLevel,
+    'W602': EventLevel.WarningLevel,
+    'W603': EventLevel.WarningLevel,
+    'W604': EventLevel.WarningLevel,
+    # Pyflakes events
+    'F401': EventLevel.WarningLevel,
+    'F811': EventLevel.WarningLevel,
+}
+
 if sys.platform.startswith('win'):
-    DEFAULT_CONFIG = os.path.expanduser(r'~\.pycheck')
+    USER_CONFIG = os.path.expanduser(r'~\.pycheck')
 else:
-    DEFAULT_CONFIG = os.path.join(
+    USER_CONFIG = os.path.join(
         os.getenv('XDG_CONFIG_HOME') or os.path.expanduser('~/.config'),
         'pycheck'
     )
+
+PROJECT_CONFIG = ('.pycheck', 'tox.ini', 'setup.cfg')
 
 
 def runner(clazz):
@@ -132,23 +163,10 @@ def runner(clazz):
     return clazz
 
 
-class LintRunner(object):
-    """Base class for tool runners.
-
-    """
-
-    def run(self, filename):
-        pass
-
-
 class OutputFormatter(object):
     """Base class for output formatters of tool output.
 
     """
-
-    ErrorLevel = 'error'
-    WarningLevel = 'warning'
-    InfoLevel = 'info'
 
     def __init__(self, output_stream=sys.stdout):
         self.output_stream = output_stream
@@ -169,12 +187,25 @@ class DefaultFormatter(OutputFormatter):
         super(DefaultFormatter, self).__init__(output_stream)
         self.event_format = event_format
 
-    def event(self, filename, description, line_number, event_code, event_level=OutputFormatter.ErrorLevel):
+    def event(self, filename, description, line_number, event_code, event_level):
         self.output_stream.write(self.event_format.format(filename=filename, line=line_number, code=event_code,
                                                           level=event_level, message=description))
 
 
-class PyflakesReporter(object):
+class BaseReporter(object):
+    """Base class for reporting events from tools.
+    """
+
+    def __init__(self, classifications):
+        self.classifications = classifications
+
+    def classify(self, code):
+        if code in ('E901', 'E902'):
+            return EventLevel.ErrorLevel
+        return self.classifications.get(code, EventLevel.ErrorLevel)
+
+
+class PyflakesReporter(BaseReporter):
     """Report events from the pyflakes tool.
 
     """
@@ -196,7 +227,7 @@ class PyflakesReporter(object):
         'UnusedVariable': 'F841',
     }
 
-    def __init__(self, formatter, ignore_codes=()):
+    def __init__(self, formatter, classifications, ignore_codes=()):
         """
         Construct a PyflakesReporter.
 
@@ -205,6 +236,7 @@ class PyflakesReporter(object):
         Kwargs:
             ignore_codes: a tuple of codes to ignore.
         """
+        super(PyflakesReporter, self).__init__(classifications)
         self.formatter = formatter
         self.ignore_codes = ignore_codes
 
@@ -216,7 +248,7 @@ class PyflakesReporter(object):
             filename: the filename causing an error.
             msg: the message to report.
         """
-        self.formatter.event(filename, msg, '', self.IO_ERROR)
+        self.formatter.event(filename, msg, '', self.IO_ERROR, EventLevel.ErrorLevel)
 
     def syntaxError(self, filename, msg, lineno, offset, text):
         """
@@ -229,7 +261,7 @@ class PyflakesReporter(object):
             offset: the offset into the line where the error occurs.
             text: a snippet of the code with the error.
         """
-        self.formatter.event(filename, msg, lineno, self.SYNTAX_ERROR)
+        self.formatter.event(filename, msg, lineno, self.SYNTAX_ERROR, EventLevel.ErrorLevel)
 
     def flake(self, event):
         """
@@ -241,31 +273,11 @@ class PyflakesReporter(object):
         code = self.flakes[event.__class__.__name__]
         if code in self.ignore_codes:
             return
-        level = self._guess_event_level(event.message)
         msg = event.message % event.message_args
-        self.formatter.event(event.filename, msg, event.lineno, code, level)
-
-    def _guess_event_level(self, message):
-        if 'imported but unused' in message:
-            return OutputFormatter.WarningLevel
-        elif 'redefinition of unused' in message:
-            return OutputFormatter.WarningLevel
-        else:
-            return OutputFormatter.ErrorLevel
+        self.formatter.event(event.filename, msg, event.lineno, code, self.classify(code))
 
 
-@runner
-class PyflakesRunner(LintRunner):
-    """Run the pyflakes tool.
-
-    """
-    RUNNER_NAME = 'pyflakes'
-
-    def run(self, filename, ignore_codes=()):
-        pyflakes.checkPath(filename, PyflakesReporter(DefaultFormatter(), ignore_codes))
-
-
-class Pep8Reporter(BaseReport):
+class Pep8Reporter(BaseReport, BaseReporter):
     """Report events from the pep8 tool.
 
     """
@@ -274,6 +286,7 @@ class Pep8Reporter(BaseReport):
         super(Pep8Reporter, self).__init__(options)
         self.formatter = DefaultFormatter()
         self.ignore_codes = ()
+        self.classifications = DEFAULT_CLASSIFICATIONS
 
     def error(self, line_number, offset, text, check):
         """Report an error, according to options.
@@ -287,10 +300,28 @@ class Pep8Reporter(BaseReport):
         code = super(Pep8Reporter, self).error(line_number, offset, text, check)
         if code in self.ignore_codes:
             return code
-
-        level = OutputFormatter.WarningLevel if code.startswith('W') else OutputFormatter.ErrorLevel
-        self.formatter.event(self.filename, text[5:], line_number, code, level)
+        self.formatter.event(self.filename, text[5:], line_number, code, self.classify(code))
         return code
+
+
+class LintRunner(object):
+    """Base class for tool runners.
+
+    """
+
+    def run(self, filename):
+        pass
+
+
+@runner
+class PyflakesRunner(LintRunner):
+    """Run the pyflakes tool.
+
+    """
+    RUNNER_NAME = 'pyflakes'
+
+    def run(self, filename, classifications, ignore_codes=()):
+        pyflakes.checkPath(filename, PyflakesReporter(DefaultFormatter(), classifications, ignore_codes))
 
 
 @runner
@@ -300,11 +331,12 @@ class Pep8Runner(LintRunner):
     """
     RUNNER_NAME = 'pep8'
 
-    def run(self, filename, ignore_codes=()):
+    def run(self, filename, classifications, ignore_codes=()):
         style_guide = StyleGuide(config_file=True)
         reporter = style_guide.init_report(reporter=Pep8Reporter)
         reporter.formatter = DefaultFormatter()
         reporter.ignore_codes = ignore_codes
+        reporter.classifications = classifications
         style_guide.input_file(filename)
 
 
@@ -315,12 +347,12 @@ class Flake8Runner(LintRunner):
     """
     RUNNER_NAME = 'flake8'
 
-    def run(self, filename, ignore_codes=()):
-        print(flake8_main.DEFAULT_CONFIG)
+    def run(self, filename, classifications, ignore_codes=()):
         style_guide = flake8_engine.get_style_guide(config_file=flake8_main.DEFAULT_CONFIG)
         reporter = style_guide.init_report(reporter=Pep8Reporter)
         reporter.formatter = DefaultFormatter()
         reporter.ignore_codes = ignore_codes
+        reporter.classifications = classifications
         style_guide.input_file(filename)
 
 
@@ -338,35 +370,82 @@ def usage():
 
 def parse_options():
     parser = OptionParser(usage=USAGE_MESSAGE)
-    parser.add_option("-i", "--ignore_codes", dest="ignore_codes", default='',
+    parser.add_option("-i", "--ignore", dest="ignore", default='',
                       help="comma separated list of error codes to ignore (e.g. E241,E242)")
     parser.add_option("-c", "--checkers", dest="checkers", default=','.join(DEFAULT_CHECKERS),
                       help="comma separated list of checkers to run (supported values: {})".format(', '.join(RUNNERS.keys())))
     parser.add_option("-f", "--format", dest="format", default=DEFAULT_EVENT_FORMAT,
                       help="the format to use to report feedback (default: ``{}``)".format(DEFAULT_EVENT_FORMAT))
+    parser.add_option("-w", "--warnings", dest="warnings", default='',
+                      help="comma separated list of codes that should be considered warnings (e.g. E241,E242)")
+    parser.add_option("-e", "--errors", dest="errors", default='',
+                      help="comma separated list of codes that should be considered errors (e.g. E241,E242)")
+    parser.add_option("-n", "--info", dest="info", default='',
+                      help="comma separated list of codes that should be considered informational (e.g. E241,E242)")
     options, args = parser.parse_args()
     if not args:
         usage()
 
     return options, args[0]
 
+
+def read_config(source_file):
+    """Read both user configuration and local configuration.
+    """
+    config = RawConfigParser()
+
+    if os.path.isfile(USER_CONFIG):
+        config.read(USER_CONFIG)
+
+    parent, child = os.path.split(os.path.abspath(source_file))
+    while child:
+        for name in PROJECT_CONFIG:
+            local_conf = os.path.join(parent, name)
+            if os.path.isfile(local_conf):
+                config.read(local_conf)
+                break
+        else:
+            parent, child = os.path.split(parent)
+            continue
+        break
+
+    return dict([(opt, config.get('pycheck', opt)) for opt in config.options('pycheck')]) if config.has_section('pycheck') else {}
+
+
+def build_classifications(options):
+    """Build the final classifications based on the options.
+    """
+    classifications = DEFAULT_CLASSIFICATIONS.copy()
+    for i in options.info.split(',') if len(options.info) else ():
+        classifications[i] = EventLevel.InfoLevel
+    for w in options.warnings.split(',') if len(options.warnings) else ():
+        classifications[w] = EventLevel.WarningLevel
+    for e in options.errors.split(',') if len(options.errors) else ():
+        classifications[e] = EventLevel.ErrorLevel
+
+    return classifications
+
+
 if __name__ == '__main__':
     # transparently add a virtualenv to the path when launched with a venv'd
     # python.
-    os.environ['PATH'] = path.dirname(sys.executable) + ':' + os.environ['PATH']
+    os.environ['PATH'] = os.path.dirname(sys.executable) + ':' + os.environ['PATH']
 
     if len(sys.argv) < 2:
         usage()
 
     options, source_file = parse_options()
-    if len(options.ignore_codes):
-        ignore_codes = tuple(options.ignore_codes.split(','))
+    config = read_config(source_file)
+    options.__dict__.update(config)
+    classifications = build_classifications(options)
+    if len(options.ignore):
+        ignore_codes = tuple(options.ignore.split(','))
     else:
         ignore_codes = ()
 
     for checker in options.checkers.split(','):
         if checker not in RUNNERS:
             croak("Unknown checker: `{}'.\nExpected one of: {}.".format(checker, ', '.join(RUNNERS.keys())))
-        (RUNNERS[checker.strip()])().run(source_file, ignore_codes)
+        (RUNNERS[checker.strip()])().run(source_file, classifications, ignore_codes)
 
     sys.exit(0)
