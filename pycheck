@@ -90,29 +90,38 @@ page[3] of the Emacs Wiki, author unknown.
 
 """
 
-## Customization ##
-
-# Checkers to run be default, when no --checkers options are supplied.
-# One or more of pep8 or pyflakes, separated by commas
-default_checkers = 'pep8, pyflakes'
-
-# A list of error codes to ignore.
-# default_ignore_codes = ['E225', 'W114']
-default_ignore_codes = []
-
-## End of customization ##
-
 import os
 from os import path
 import sys
 
+from optparse import OptionParser
+
 from pyflakes import api as pyflakes
 from pep8 import StyleGuide, BaseReport
+from flake8 import engine as flake8_engine, main as flake8_main
 
 try:
     u = unicode
 except NameError:
     u = str
+
+
+USAGE_MESSAGE = "Usage: %s [options] <file>" % sys.argv[0]
+
+RUNNERS = {}
+
+DEFAULT_CHECKERS = ['flake8']
+
+DEFAULT_EVENT_FORMAT = u('{filename}:{line}:{level} {code} {message}.\n')
+
+
+def runner(clazz):
+    """The decoration implementation for runner classes.
+
+    Tracks the classes by mapping `clazz.RUNNER_NAME` to the class.
+    """
+    RUNNERS[clazz.RUNNER_NAME] = clazz
+    return clazz
 
 
 class LintRunner(object):
@@ -143,69 +152,90 @@ class OutputFormatter(object):
         pass
 
 
-class FlymakeFormatter(OutputFormatter):
-    """Format tool output for flymake.
+class DefaultFormatter(OutputFormatter):
+    """Default tool output formatter.
 
     """
 
-    error_output = u('{filename}:{line}:: {message}.\n')
-    event_output = u('{filename}:{line}:{kind}{number}:{level} {message}.\n')
+    def __init__(self, output_stream=sys.stdout, event_format=DEFAULT_EVENT_FORMAT):
+        super(DefaultFormatter, self).__init__(output_stream)
+        self.event_format = event_format
 
-    def error(self, filename, message, line_number=''):
-        self.output_stream.write(self.error_output.format(filename=filename, line=line_number, message=message))
-
-    def event(self, filename, description, line_number, event_level=OutputFormatter.ErrorLevel, event_kind='', event_number=''):
-        self.output_stream.write(self.event_output.format(level=event_level,
-                                                          kind=event_kind,
-                                                          number=event_number,
-                                                          message=description,
-                                                          filename=filename,
-                                                          line=line_number))
+    def event(self, filename, description, line_number, event_code, event_level=OutputFormatter.ErrorLevel):
+        self.output_stream.write(self.event_format.format(filename=filename, line=line_number, code=event_code,
+                                                          level=event_level, message=description))
 
 
 class PyflakesReporter(object):
     """Report events from the pyflakes tool.
 
     """
+    IO_ERROR = 'E902'
+    SYNTAX_ERROR = 'E901'
 
-    def __init__(self, formatter):
+    flakes = {
+        'UnusedImport': 'F401',
+        'ImportShadowedByLoopVar': 'F402',
+        'ImportStarUsed': 'F403',
+        'LateFutureImport': 'F403',
+        'Redefined': 'F810',
+        'RedefinedWhileUnused': 'F811',
+        'RedefinedInListComp': 'F812',
+        'UndefinedName': 'F821',
+        'UndefinedExport': 'F822',
+        'UndefinedLocal': 'F823',
+        'DuplicateArgument': 'F831',
+        'UnusedVariable': 'F841',
+    }
+
+    def __init__(self, formatter, ignore_codes=()):
         """
         Construct a PyflakesReporter.
 
         Args:
-            formatter: an instance of OutputFormatter
+            formatter: an OutputFormatter instance.
+        Kwargs:
+            ignore_codes: a tuple of codes to ignore.
         """
         self.formatter = formatter
+        self.ignore_codes = ignore_codes
 
     def unexpectedError(self, filename, msg):
         """
-        An unexpected error occurred trying to process filename.
+        An unexpected error occurred trying to process the file.
 
         Args:
-            filename: the filename causing an error
-            msg: the message to report
+            filename: the filename causing an error.
+            msg: the message to report.
         """
-        self.formatter.error(filename, msg)
+        self.formatter.event(filename, msg, '', self.IO_ERROR)
 
     def syntaxError(self, filename, msg, lineno, offset, text):
         """
-        There was a syntax errror in filename.
+        There was a syntax errror in the file.
 
+        Args:
+            filename: the filename causing an error.
+            msg: the message to report.
+            lineno: the line number of the syntax error.
+            offset: the offset into the line where the error occurs.
+            text: a snippet of the code with the error.
         """
-        event_level = self._guess_event_level(msg)
-        self.formatter.event(filename, msg, lineno, event_level, 'PY', 'S')
+        self.formatter.event(filename, msg, lineno, self.SYNTAX_ERROR)
 
     def flake(self, event):
         """
         pyflakes found something wrong with the code.
 
         Args:
-            event: A pyflakes.messages.Message.
+            event: A pyflakes.messages.Message instance.
         """
-        event_level = self._guess_event_level(event.message)
+        code = self.flakes[event.__class__.__name__]
+        if code in self.ignore_codes:
+            return
+        level = self._guess_event_level(event.message)
         msg = event.message % event.message_args
-        self.formatter.event(event.filename, msg, event.lineno,
-                             event_level, 'PY', 'F')
+        self.formatter.event(event.filename, msg, event.lineno, code, level)        
 
     def _guess_event_level(self, message):
         if 'imported but unused' in message:
@@ -216,13 +246,15 @@ class PyflakesReporter(object):
             return OutputFormatter.ErrorLevel
 
 
+@runner
 class PyflakesRunner(LintRunner):
     """Run the pyflakes tool.
 
     """
+    RUNNER_NAME = 'pyflakes'
 
-    def run(self, filename):
-        pyflakes.checkPath(filename, PyflakesReporter(FlymakeFormatter()))
+    def run(self, filename, ignore_codes=()):
+        pyflakes.checkPath(filename, PyflakesReporter(DefaultFormatter(), ignore_codes))
 
 
 class Pep8Reporter(BaseReport):
@@ -230,35 +262,57 @@ class Pep8Reporter(BaseReport):
 
     """
 
-    def error(self, line_number, offset, text, check):
-        """Report an error, according to options."""
-        code = super(Pep8Reporter, self).error(line_number, offset,
-                                               text, check)
+    def __init__(self, options):
+        super(Pep8Reporter, self).__init__(options)
+        self.formatter = DefaultFormatter()
+        self.ignore_codes = ()
 
-        event_level = OutputFormatter.WarningLevel if code.startswith('W') else OutputFormatter.ErrorLevel
-        self.formatter.event(self.filename, text[5:], line_number, event_level, code[:1], code[1:])
+    def error(self, line_number, offset, text, check):
+        """Report an error, according to options.
+
+        Args:
+            line_number: the line number of the syntax error.
+            offset: the offset into the line where the error occurs.
+            text: the message to report.
+            check: the check that was run to produce this error.
+        """
+        code = super(Pep8Reporter, self).error(line_number, offset, text, check)
+        if code in self.ignore_codes:
+            return code
+
+        level = OutputFormatter.WarningLevel if code.startswith('W') else OutputFormatter.ErrorLevel
+        self.formatter.event(self.filename, text[5:], line_number, code, level)
         return code
 
 
+@runner
 class Pep8Runner(LintRunner):
     """Run the pep8 tool.
 
     """
-    def run(self, filename):
+    RUNNER_NAME = 'pep8'
+
+    def run(self, filename, ignore_codes=()):
         style_guide = StyleGuide(config_file=True)
         reporter = style_guide.init_report(reporter=Pep8Reporter)
-        reporter.formatter = FlymakeFormatter()
+        reporter.formatter = DefaultFormatter()
+        reporter.ignore_codes = ignore_codes
         style_guide.input_file(filename)
 
 
+@runner
 class Flake8Runner(LintRunner):
     """Run the flake8 tool.
 
     """
-    def run(self, filename):
-        style_guide = StyleGuide(config_file=True)
+    RUNNER_NAME = 'flake8'
+
+    def run(self, filename, ignore_codes=()):
+        print(flake8_main.DEFAULT_CONFIG)
+        style_guide = flake8_engine.get_style_guide(config_file=flake8_main.DEFAULT_CONFIG)
         reporter = style_guide.init_report(reporter=Pep8Reporter)
-        reporter.formatter = FlymakeFormatter()
+        reporter.formatter = DefaultFormatter()
+        reporter.ignore_codes = ignore_codes
         style_guide.input_file(filename)
 
 
@@ -269,11 +323,23 @@ def croak(*msgs):
     sys.stderr.flush()
     sys.exit(1)
 
-RUNNERS = {
-    'pyflakes': PyflakesRunner,
-    'pep8': Pep8Runner,
-    'flake8': Flake8Runner
-}
+
+def usage():
+    croak(USAGE_MESSAGE)
+
+def parse_options():
+    parser = OptionParser(usage=USAGE_MESSAGE)
+    parser.add_option("-i", "--ignore_codes", dest="ignore_codes", default='',
+                      help="comma separated list of error codes to ignore (e.g. E241,E242)")
+    parser.add_option("-c", "--checkers", dest="checkers", default=','.join(DEFAULT_CHECKERS),
+                      help="comma separated list of checkers to run (supported values: {})".format(', '.join(RUNNERS.keys())))
+    parser.add_option("-f", "--format", dest="format", default=DEFAULT_EVENT_FORMAT,
+                      help="the format to use to report feedback (default: {})".format(DEFAULT_EVENT_FORMAT))
+    options, args = parser.parse_args()
+    if not args:
+        usage()
+
+    return options, args[0]
 
 if __name__ == '__main__':
     # transparently add a virtualenv to the path when launched with a venv'd
@@ -281,34 +347,17 @@ if __name__ == '__main__':
     os.environ['PATH'] = path.dirname(sys.executable) + ':' + os.environ['PATH']
 
     if len(sys.argv) < 2:
-        croak("Usage: %s [file]" % sys.argv[0])
-    elif len(sys.argv) > 2:
-        from optparse import OptionParser
-        parser = OptionParser()
-        parser.add_option("-i", "--ignore_codes", dest="ignore_codes",
-                          default=[], action='append',
-                          help="error codes to ignore")
-        parser.add_option("-c", "--checkers", dest="checkers",
-                          default='pep8,pyflakes',
-                          help="comma separated list of checkers")
-        options, args = parser.parse_args()
-        if not args:
-            croak("Usage: %s [file]" % sys.argv[0])
+        usage()
 
-        checkers = options.checkers or default_checkers
-        ignore_codes = options.ignore_codes or default_ignore_codes
-        source_file = args[0]
+    options, source_file = parse_options()
+    if len(options.ignore_codes):
+        ignore_codes = tuple(options.ignore_codes.split(','))
     else:
-        source_file = sys.argv[1]
-        checkers = default_checkers
-        ignore_codes = default_ignore_codes
+        ignore_codes = ()
 
-    for checker in checkers.split(','):
-        try:
-            runner = (RUNNERS[checker.strip()])()
-        except KeyError:
-            croak(("Unknown checker `%s'" % checker),
-                  ("Expected one of %s" % ', '.join(RUNNERS.keys())))
-        runner.run(source_file)
+    for checker in options.checkers.split(','):
+        if checker not in RUNNERS:
+            croak("Unknown checker: `{}'.\nExpected one of: {}.".format(checker, ', '.join(RUNNERS.keys())))
+        (RUNNERS[checker.strip()])().run(source_file, ignore_codes)
 
     sys.exit(0)
