@@ -309,7 +309,7 @@ class LintRunner(object):
 
     """
 
-    def run(self, filename):
+    def run(self, source_path):
         pass
 
 
@@ -320,8 +320,11 @@ class PyflakesRunner(LintRunner):
     """
     RUNNER_NAME = 'pyflakes'
 
-    def run(self, filename, classifications, ignore_codes=()):
-        pyflakes.checkPath(filename, PyflakesReporter(DefaultFormatter(), classifications, ignore_codes))
+    def run(self, source_path, classifications, ignore_codes=()):
+        if os.path.isdir(source_path):
+            pyflakes.checkRecursive(source_path, PyflakesReporter(DefaultFormatter(), classifications, ignore_codes))
+        else:
+            pyflakes.checkPath(source_path, PyflakesReporter(DefaultFormatter(), classifications, ignore_codes))
 
 
 @runner
@@ -331,13 +334,16 @@ class Pep8Runner(LintRunner):
     """
     RUNNER_NAME = 'pep8'
 
-    def run(self, filename, classifications, ignore_codes=()):
+    def run(self, source_path, classifications, ignore_codes=()):
         style_guide = StyleGuide(config_file=True)
         reporter = style_guide.init_report(reporter=Pep8Reporter)
         reporter.formatter = DefaultFormatter()
         reporter.ignore_codes = ignore_codes
         reporter.classifications = classifications
-        style_guide.input_file(filename)
+        if os.path.isdir(source_path):
+            style_guide.input_dir(source_path)
+        else:
+            style_guide.input_file(source_path)
 
 
 @runner
@@ -347,13 +353,16 @@ class Flake8Runner(LintRunner):
     """
     RUNNER_NAME = 'flake8'
 
-    def run(self, filename, classifications, ignore_codes=()):
+    def run(self, source_path, classifications, ignore_codes=()):
         style_guide = flake8_engine.get_style_guide(config_file=flake8_main.DEFAULT_CONFIG)
         reporter = style_guide.init_report(reporter=Pep8Reporter)
         reporter.formatter = DefaultFormatter()
         reporter.ignore_codes = ignore_codes
         reporter.classifications = classifications
-        style_guide.input_file(filename)
+        if os.path.isdir(source_path):
+            style_guide.input_dir(source_path)
+        else:
+            style_guide.input_file(source_path)
 
 
 def croak(*msgs):
@@ -397,7 +406,10 @@ def read_config(source_file):
     if os.path.isfile(USER_CONFIG):
         config.read(USER_CONFIG)
 
-    parent, child = os.path.split(os.path.abspath(source_file))
+    if os.path.isdir(source_file):
+        parent, child = source_file, 'dummy'
+    else:
+        parent, child = os.path.split(os.path.abspath(source_file))
     while child:
         for name in PROJECT_CONFIG:
             local_conf = os.path.join(parent, name)
@@ -434,8 +446,8 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         usage()
 
-    options, source_file = parse_options()
-    config = read_config(source_file)
+    options, source_path = parse_options()
+    config = read_config(source_path)
     options.__dict__.update(config)
     classifications = build_classifications(options)
     if len(options.ignore):
@@ -446,6 +458,6 @@ if __name__ == '__main__':
     for checker in options.checkers.split(','):
         if checker not in RUNNERS:
             croak("Unknown checker: `{}'.\nExpected one of: {}.".format(checker, ', '.join(RUNNERS.keys())))
-        (RUNNERS[checker.strip()])().run(source_file, classifications, ignore_codes)
+        (RUNNERS[checker.strip()])().run(source_path, classifications, ignore_codes)
 
     sys.exit(0)
