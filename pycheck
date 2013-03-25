@@ -334,7 +334,7 @@ def parse_options():
     parser.add_option("-c", "--checkers", dest="checkers", default=','.join(DEFAULT_CHECKERS),
                       help="comma separated list of checkers to run (supported values: {})".format(', '.join(RUNNERS.keys())))
     parser.add_option("-f", "--format", dest="format", default=DEFAULT_EVENT_FORMAT,
-                      help="the format to use to report feedback (default: {})".format(DEFAULT_EVENT_FORMAT))
+                      help="the format to use to report feedback (default: ``{}``)".format(DEFAULT_EVENT_FORMAT))
     options, args = parser.parse_args()
     if not args:
         usage()
