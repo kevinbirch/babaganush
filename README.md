@@ -6,7 +6,7 @@ Babaganush is a wrapper for these static analysis tools:
 * [PEP8](https://github.com/jcrocholl/pep8)
 * [Flake8](http://github.com/bmcustodio/flake8)
 
-It supports all of the great features of these tools as pass-throughs and adds:
+It supports all of the great features of these tools as pass-thrus and adds:
 
 * It can run a single tool (i.e. run only PyFlakes or PEP8)
 * Consistent, configurable output format for all tools
@@ -26,14 +26,36 @@ The output of all tools run will be merged and formatted and classified accordin
 
 The following options are supported from both the command line and the config file:
 
-* ignore - a comma separated list of codes to ignore
-* checkers - a comma separted list of checkers to run
-* format - the output format to use to report 
-* info - a comma separated list of codes to consider informational
-* warnings - a comma separated list of codes to consider warnings
-* errors - a comma separated list of codes to consider errors
+* `ignore` - a comma separated list of codes to ignore
+* `checkers` - a comma separated list of checkers to run
+* `format` - the output format to use to report 
+* `info` - a comma separated list of codes to consider informational
+* `warnings` - a comma separated list of codes to consider warnings
+* `errors` - a comma separated list of codes to consider errors
 
-N.B. - If no codes are specified to be ignored, both PEP8 and Flake8 ignore E226, E241 and E242 by default.
+The config file section `[pycheck]` is used to set options for this script.  For example:
+
+```
+[pycheck]
+info = N802
+warnings = E501
+```
+
+### Global
+
+Global configuration is read from the `~/.config/pycheck` file.
+
+### Project
+
+Project level configuration is read from the `.pycheck`, `tox.ini` or `setup.cfg` files if they exist.  Only the first of these to be found (searched in that order, from the working directory of the given path argument upward) will be considered.
+
+### Runtime
+
+Any command line options supersede configuration read from files.
+
+### Default
+
+N.B. - If nothing is specified for `ignore`, both PEP8 and Flake8 ignore E226, E241 and E242 by default.
 
 ## Output Formatting
 
@@ -69,6 +91,30 @@ The error codes that were [introduced by Flake8 for PyFlakes](http://flake8.read
 
 N.B. - any issue code reported by any tool or plugin of a tool can be classified in this way.
 
+## Usage from Emacs
+
+To use this script with Flymake-mode, add something like the 
+following to your init file:
+
+```lisp
+(defun flymake-create-temp-in-system-tempdir (filename prefix)
+  (make-temp-file (or prefix "flymake")))
+
+(defun flymake-pycheck ()
+    (let* ((temp-file (flymake-init-create-temp-buffer-copy 'flymake-create-temp-in-system-tempdir)))
+      (list (expand-file-name "~/bin/pycheck") (list temp-file))))
+
+(add-to-list 'flymake-allowed-file-name-masks '("\\.py\\'" flymake-pycheck))
+
+(add-hook 'python-mode-hook 'flymake-mode)
+```
+
+Replace `~/bin/pycheck` with the location where you've saved this
+script.
+
+The results will be printed to standard out in a format compatible
+with flymake.
+
 ## Copyright
 
 Copyright (c) 2013 Kevin Birch <kmb@pobox.com>. All rights reserved.
@@ -103,12 +149,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE SOFTWARE.
 
 ## Colophon
 
-This script is adapted from code orignally written by Jason Kirtland
-<jek@discorporate.us>[1] and released under the Creative Commons Share
-Alike 1.0 license[2].
+This script is adapted from code originally written by [Jason Kirtland][1]
+<jek@discorporate.us> and released under the [Creative Commons Share
+Alike 1.0 license][2].
 
-Jason's code was based on original work taken from the PythonMode
-page[3] of the Emacs Wiki, author unknown.
+Jason's code was based on original work taken from the [PythonMode
+page][3] of the Emacs Wiki, author unknown.
 
 [1] https://bitbucket.org/jek/sandbox/src/tip/pycheckers
 [2] http://creativecommons.org/licenses/sa/1.0/
