@@ -33,7 +33,7 @@ The following options are supported from both the command line and the config fi
 * `warnings` - a comma separated list of codes to consider warnings
 * `errors` - a comma separated list of codes to consider errors
 
-The config file section `[pycheck]` is used to set options for this script.  For example:
+The config file section `[pycheck]` is used to set options for Babaganush.  For example:
 
 ```
 [pycheck]
@@ -93,7 +93,7 @@ N.B. - any issue code reported by any tool or plugin of a tool can be classified
 
 ## Usage from Emacs
 
-To use this script with Flymake-mode, add something like the 
+To use Babaganush with Flymake-mode, add something like the 
 following to your init file:
 
 ```lisp
@@ -109,8 +109,8 @@ following to your init file:
 (add-hook 'python-mode-hook 'flymake-mode)
 ```
 
-Replace `~/bin/pycheck` with the location where you've saved this
-script.
+Replace `~/bin/pycheck` with the location where you've saved the
+tool.
 
 The results will be printed to standard out in a format compatible
 with flymake.
@@ -149,7 +149,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE SOFTWARE.
 
 ## Colophon
 
-This script is adapted from ["pycheckers"][1] originally written by Jason Kirtland
+Babaganush is adapted from ["pycheckers"][1] originally written by Jason Kirtland
 <jek@discorporate.us> and released under the [Creative Commons Share
 Alike 1.0 license][2].
 
