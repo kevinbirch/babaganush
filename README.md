@@ -55,7 +55,7 @@ Any command line options supersede configurations read from files.
 
 ### Default
 
-N.B. - If nothing is specified for `ignore`, both PEP8 and Flake8 ignore E226, E241 and E242 by default.
+N.B. - If nothing is specified for `ignore`, both PEP8 and Flake8 ignore [E226, E241 and E242](http://pep8.readthedocs.org/en/latest/intro.html#error-codes) by default.
 
 ## Output Formatting
 
