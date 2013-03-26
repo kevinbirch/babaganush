@@ -8,7 +8,6 @@ Babaganush is a wrapper for these static analysis tools:
 
 It supports all of the great features of these tools as pass-throughs and adds:
 
-* Native configuration files are honored (for PEP8 and Flake8)
 * It can run a single tool (i.e. run only PyFlakes or PEP8)
 * Consistent, configurable output format for all tools
 * Any code reported by a tool can be classified as error, warning or info 
@@ -46,7 +45,7 @@ The format that is used to report tool output can be set with the `format` confi
 
 It uses the standard Python [string format](http://docs.python.org/2/library/string.html#format-string-syntax) syntax, so it's easy to organize by keyword.
 
-## Output Classification
+## Issue Classification
 
 The issues reported by the tools can be classified as errors, warnings or informational.  This can be used in conjunction with your editor to better visually classify the reported issue, or with version control hooks.
 
@@ -68,5 +67,5 @@ By default, the following codes are warnings (all others default to errors):
 
 The error codes that were [introduced by Flake8 for PyFlakes](http://flake8.readthedocs.org/en/latest/warnings.html) are honored and used when PyFlakes is run by itself or through Flake8.
 
-N.B. - any code issue by any tool or plugin of a tool can be classified in this way.
+N.B. - any issue code reported by any tool or plugin of a tool can be classified in this way.
 
