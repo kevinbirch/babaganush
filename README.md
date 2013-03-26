@@ -69,7 +69,7 @@ It uses the standard Python [string format](http://docs.python.org/2/library/str
 
 ## Issue Classification
 
-Sometimes the issues reported by these tools may be useful, but too pedantic or common to fix at the time.  In these situations, it's very useful to have a way to "squelch" the output to esure more critical issue stand out.  Babaganush lets you set the severity level of issues reported by the tools.  Any issue code an be can be classified as errors, warnings or informational.  This can be used in conjunction with your editor to better visually classify the reported issue, or with version control hooks.
+Sometimes the issues reported by these tools may be useful, but too pedantic or common to fix at the time.  In these situations, it's very useful to have a way to "squelch" the output to esure more critical issues stand out.  Babaganush lets you set the severity level of issues reported by the tools.  Any issue code an be can be classified as errors, warnings or informational.  This can be used in conjunction with your editor to better visually classify the reported issue, or with version control hooks.
 
 The configuration options `info`, `warnings` and `errors` will classify reported issues accordingly and the associated level will be reported in the `{code}` format keyword.
 
