@@ -82,7 +82,7 @@ RUNNERS = {}
 
 DEFAULT_CHECKERS = ['flake8']
 
-DEFAULT_EVENT_FORMAT = u('{filename}:{line}:{level} {code} {message}.\n')
+DEFAULT_EVENT_FORMAT = u('{filename}:{line}:{offset}:{level} {code} {message}.\n')
 
 
 class EventLevel(object):
@@ -137,10 +137,7 @@ class OutputFormatter(object):
     def __init__(self, output_stream=sys.stdout):
         self.output_stream = output_stream
 
-    def error(self, filename, message, line_number):
-        pass
-
-    def event(self, filename, description, line_number, event_level, event_kind, event_number):
+    def event(self, filename, description, line_number, offset, event_level, event_kind, event_number):
         pass
 
 
@@ -153,9 +150,9 @@ class DefaultFormatter(OutputFormatter):
         super(DefaultFormatter, self).__init__(output_stream)
         self.event_format = event_format
 
-    def event(self, filename, description, line_number, event_code, event_level):
-        self.output_stream.write(self.event_format.format(filename=filename, line=line_number, code=event_code,
-                                                          level=event_level, message=description))
+    def event(self, filename, description, line_number, offset, event_code, event_level):
+        self.output_stream.write(self.event_format.format(filename=filename, line=line_number, offset=offset,
+                                                          code=event_code, level=event_level, message=description))
 
 
 class BaseReporter(object):
@@ -214,7 +211,7 @@ class PyflakesReporter(BaseReporter):
             filename: the filename causing an error.
             msg: the message to report.
         """
-        self.formatter.event(filename, msg, '', self.IO_ERROR, EventLevel.ErrorLevel)
+        self.formatter.event(filename, msg, '', '', self.IO_ERROR, EventLevel.ErrorLevel)
 
     def syntaxError(self, filename, msg, lineno, offset, text):
         """
@@ -227,7 +224,7 @@ class PyflakesReporter(BaseReporter):
             offset: the offset into the line where the error occurs.
             text: a snippet of the code with the error.
         """
-        self.formatter.event(filename, msg, lineno, self.SYNTAX_ERROR, EventLevel.ErrorLevel)
+        self.formatter.event(filename, msg, lineno, offset, self.SYNTAX_ERROR, EventLevel.ErrorLevel)
 
     def flake(self, event):
         """
@@ -240,7 +237,8 @@ class PyflakesReporter(BaseReporter):
         if code in self.ignore_codes:
             return
         msg = event.message % event.message_args
-        self.formatter.event(event.filename, msg, event.lineno, code, self.classify(code))
+        offset = event.offset if hasattr(event, 'offset') else '0'
+        self.formatter.event(event.filename, msg, event.lineno, offset, code, self.classify(code))
 
 
 class Pep8Reporter(BaseReport, BaseReporter):
@@ -266,7 +264,7 @@ class Pep8Reporter(BaseReport, BaseReporter):
         code = super(Pep8Reporter, self).error(line_number, offset, text, check)
         if code in self.ignore_codes:
             return code
-        self.formatter.event(self.filename, text[5:], line_number, code, self.classify(code))
+        self.formatter.event(self.filename, text[5:], line_number, offset, code, self.classify(code))
         return code
 
 
