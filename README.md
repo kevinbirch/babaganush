@@ -149,15 +149,15 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE SOFTWARE.
 
 ## Colophon
 
-This script is adapted from code originally written by [Jason Kirtland][1]
+This script is adapted from ["pycheckers"][1] originally written by Jason Kirtland
 <jek@discorporate.us> and released under the [Creative Commons Share
 Alike 1.0 license][2].
 
 Jason's code was based on original work taken from the [PythonMode
 page][3] of the Emacs Wiki, author unknown.
 
-[1] https://bitbucket.org/jek/sandbox/src/tip/pycheckers
-[2] http://creativecommons.org/licenses/sa/1.0/
-[3] http://www.emacswiki.org/emacs/PythonMode
+[1]: https://bitbucket.org/jek/sandbox/src/tip/pycheckers
+[2]: http://creativecommons.org/licenses/sa/1.0/
+[3]: http://www.emacswiki.org/emacs/PythonMode
 
 
