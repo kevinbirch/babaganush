@@ -2,46 +2,12 @@
 """A helper script to run static analysis tools on Python code and
 report issues.
 
-Currently supported tools are Pyflakes and PEP8.
-
-## Usage from Emacs
-
-Add something like the following to your init file:
-
-```lisp
-(add-hook 'python-mode-hook
-          (lambda ()
-            (flymake-mode)
-            )
-          )
-
-(defun flymake-pycheckers-init ()
-    (let* ((temp-file (flymake-init-create-temp-buffer-copy
-                       'flymake-create-temp-inplace))
-           (local-file (file-relative-name
-                        temp-file
-                        (file-name-directory buffer-file-name))))
-      (list (expand-file-name "~/bin/pycheck") (list local-file))))
-
-(add-to-list 'flymake-allowed-file-name-masks
-               '("\\.py\\'" flymake-pycheckers-init))
-```
-
-Replace `~/bin/pycheck` with the location where you've saved this
-script.
-
-The results will be printed to standard out in a format compatible
-with flymake.
+Currently supported tools are Flake8, Pyflakes and PEP8.
 
 ## Usage from the command line
 
-Simply run this script with a Python file as the only argument.
-
-## Caveats
-
-You may also need to set up your path up in the __main__ function at
-the bottom of the file and change the #! line above to an appropriate
-interpreter.
+Simply run this script with a Python file or a directory as the only
+argument.
 
 ## Copyright
 
