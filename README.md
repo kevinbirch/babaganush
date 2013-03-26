@@ -33,7 +33,7 @@ The following options are supported from both the command line and the config fi
 * `warnings` - a comma separated list of codes to consider warnings
 * `errors` - a comma separated list of codes to consider errors
 
-The config file section `[pycheck]` is used to set options for Babaganush.  For example:
+The config file section `[pycheck]` is used to set options for babaganush.  For example:
 
 ```
 [pycheck]
