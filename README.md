@@ -20,7 +20,7 @@ $ pycheck <path>
 
 You can invoke this tool against any single python file or a directory to be scanned recursively for python files (*.py) to evaluate.
 
-The output of all tools run will be merged and formatted and classified according to the settings.  The default tool to run is Flake8, and the native settings files for both the PEP8 and Flake8 tools are supported.  Any Flake8 plugins will be run according to Flake8 settings.
+The output of all tools run will be merged and formatted and classified according to the settings.  The default tool to run is Flake8, and the native settings files for both the [PEP8](http://pep8.readthedocs.org/en/latest/intro.html#configuration) and [Flake8](http://flake8.readthedocs.org/en/latest/config.html) tools are honored and used both those tools when run.  Any [Flake8 plugins](http://flake8.readthedocs.org/en/latest/extensions.html) will be run according to Flake8 settings.
 
 ## Configuration
 
