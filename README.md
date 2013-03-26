@@ -51,7 +51,7 @@ Project level configuration is read from the `.pycheck`, `tox.ini` or `setup.cfg
 
 ### Runtime
 
-Any command line options supersede configuration read from files.
+Any command line options supersede configurations read from files.
 
 ### Default
 
